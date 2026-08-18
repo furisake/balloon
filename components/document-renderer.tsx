@@ -20,7 +20,7 @@ export function DocumentRenderer({ document, settings, highlights = [], allowedI
 function Block({ block, highlights, allowedImageHosts }: { block: BlockNode; highlights: Array<{ from: number; to: number }>; allowedImageHosts: readonly string[] }) {
   if (block.type === "pageBreak") return <hr data-source-from={block.sourceRange.from} className="my-8 border-[var(--border)]" />;
   const children = block.children.map((node, index) => <Inline key={`${node.sourceRange.from}-${index}`} node={node} highlights={highlights} allowedImageHosts={allowedImageHosts} />);
-  const props = { "data-source-from": block.sourceRange.from, "data-source-to": block.sourceRange.to, className: "mb-[1em]" };
+  const props = { "data-source-from": block.sourceRange.from, "data-source-to": block.sourceRange.to, className: "mb-[1em]", style: block.indent ? { marginInlineStart: `${block.indent}em` } : undefined };
   if (block.type === "heading") {
     const Tag = `h${block.level + 1}` as "h2" | "h3" | "h4";
     return <Tag {...props} className={`${props.className} font-bold`}>{children}</Tag>;

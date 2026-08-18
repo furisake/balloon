@@ -11,8 +11,8 @@ export type InlineNode =
   | (NodeBase & { type: "image"; src: string; alt: string; width?: number; height?: number });
 
 export type BlockNode =
-  | (NodeBase & { type: "paragraph"; children: InlineNode[] })
-  | (NodeBase & { type: "heading"; level: 1 | 2 | 3; children: InlineNode[] })
+  | (NodeBase & { type: "paragraph"; children: InlineNode[]; indent?: number })
+  | (NodeBase & { type: "heading"; level: 1 | 2 | 3; children: InlineNode[]; indent?: number })
   | (NodeBase & { type: "pageBreak" });
 
 export interface DocumentNode extends NodeBase { type: "document"; children: BlockNode[] }

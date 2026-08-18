@@ -1,7 +1,8 @@
 import { tokenize } from "./tokenizer";
 import type { BlockNode, Diagnostic, DocumentNode, InlineNode, ParseResult, Token } from "./types";
 
-const HEADING = /^(大|中|小)見出し$/;
+const HEADING = /^(?:(?:「([^」]+)」は)?(大|中|小)見出し)$/;
+const INDENT = /^([０-９0-9]+)字下げ$/;
 const IMAGE = /^挿絵（(.+?)(?:、横(\d+)×縦(\d+))?）入る$/;
 
 export function parse(source: string): ParseResult {
@@ -24,15 +25,26 @@ export function parseBlock(source: string, offset: number, diagnostics: Diagnost
     return { type: "pageBreak", sourceRange: { from: offset, to: offset + source.length } };
   }
   let level: 1 | 2 | 3 | undefined;
+  let headingTarget: string | undefined;
   if (last?.type === "annotation") {
     const value = last.value.slice(2, -1);
     const match = value.match(HEADING);
-    if (match) level = match[1] === "大" ? 1 : match[1] === "中" ? 2 : 3;
+    if (match) {
+      headingTarget = match[1];
+      level = match[2] === "大" ? 1 : match[2] === "中" ? 2 : 3;
+    }
   }
-  const content = level ? tokens.slice(0, -1) : tokens;
+  const withoutHeading = level ? tokens.slice(0, -1) : tokens;
+  const first = withoutHeading[0];
+  const indentMatch = first?.type === "annotation" ? first.value.slice(2, -1).match(INDENT) : undefined;
+  const indent = indentMatch ? parseFullWidthNumber(indentMatch[1]) : undefined;
+  const content = indentMatch ? withoutHeading.slice(1) : withoutHeading;
   const children = parseInline(content, diagnostics);
   const sourceRange = { from: offset, to: offset + source.length };
-  return level ? { type: "heading", level, children, sourceRange } : { type: "paragraph", children, sourceRange };
+  if (level && headingTarget !== undefined && children.map(inlineText).join("") !== headingTarget) {
+    diagnostics.push({ from: last?.sourceRange.from ?? offset, to: last?.sourceRange.to ?? offset + source.length, severity: "error", message: "見出し注記の対象文字列が本文と一致しません" });
+  }
+  return level ? { type: "heading", level, children, indent, sourceRange } : { type: "paragraph", children, indent, sourceRange };
 }
 
 function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
@@ -78,6 +90,7 @@ function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
 }
 
 function toNumber(value: string | undefined) { return value ? Number(value) : undefined; }
+function parseFullWidthNumber(value: string): number { return Number(value.replace(/[０-９]/g, (character) => String(character.charCodeAt(0) - 0xff10))); }
 
 export function visibleText(node: DocumentNode): string {
   return node.children.flatMap((block) => "children" in block ? block.children.map(inlineText).join("") : "").join("\n");
