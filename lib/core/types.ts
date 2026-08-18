@@ -1,6 +1,11 @@
-export interface SourceRange { from: number; to: number }
+export interface SourceRange {
+  from: number;
+  to: number;
+}
 
-interface NodeBase { sourceRange: SourceRange }
+interface NodeBase {
+  sourceRange: SourceRange;
+}
 
 export type InlineNode =
   | (NodeBase & { type: "text"; value: string })
@@ -8,14 +13,28 @@ export type InlineNode =
   | (NodeBase & { type: "emphasis"; children: InlineNode[] })
   | (NodeBase & { type: "note"; value: string })
   | (NodeBase & { type: "gaiji"; description: string })
-  | (NodeBase & { type: "image"; src: string; alt: string; width?: number; height?: number });
+  | (NodeBase & {
+      type: "image";
+      src: string;
+      alt: string;
+      width?: number;
+      height?: number;
+    });
 
 export type BlockNode =
   | (NodeBase & { type: "paragraph"; children: InlineNode[]; indent?: number })
-  | (NodeBase & { type: "heading"; level: 1 | 2 | 3; children: InlineNode[]; indent?: number })
+  | (NodeBase & {
+      type: "heading";
+      level: 1 | 2 | 3;
+      children: InlineNode[];
+      indent?: number;
+    })
   | (NodeBase & { type: "pageBreak" });
 
-export interface DocumentNode extends NodeBase { type: "document"; children: BlockNode[] }
+export interface DocumentNode extends NodeBase {
+  type: "document";
+  children: BlockNode[];
+}
 
 export interface Diagnostic {
   from: number;
@@ -25,6 +44,13 @@ export interface Diagnostic {
   suggestion?: string;
 }
 
-export interface ParseResult { document: DocumentNode; diagnostics: Diagnostic[] }
+export interface ParseResult {
+  document: DocumentNode;
+  diagnostics: Diagnostic[];
+}
 
-export interface Token { type: "text" | "ruby" | "annotation" | "newline"; value: string; sourceRange: SourceRange }
+export interface Token {
+  type: "text" | "ruby" | "annotation" | "newline";
+  value: string;
+  sourceRange: SourceRange;
+}

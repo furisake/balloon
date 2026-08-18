@@ -11,9 +11,15 @@ export async function GET(request: Request) {
   if (!query) return NextResponse.json({ items: [], hasMore: false });
   try {
     const results = searchBooks(await getCatalog(), query);
-    return NextResponse.json({ items: results.slice(offset, offset + APP_CONFIG.searchPageSize), hasMore: offset + APP_CONFIG.searchPageSize < results.length });
+    return NextResponse.json({
+      items: results.slice(offset, offset + APP_CONFIG.searchPageSize),
+      hasMore: offset + APP_CONFIG.searchPageSize < results.length,
+    });
   } catch (error) {
     logger.error({ error }, "Catalog search failed");
-    return NextResponse.json({ message: "作品一覧を取得できませんでした" }, { status: 502 });
+    return NextResponse.json(
+      { message: "作品一覧を取得できませんでした" },
+      { status: 502 },
+    );
   }
 }
