@@ -216,7 +216,7 @@ export function EditorWorkspace() {
         EditorView.theme({
           "&": { height: "100%", backgroundColor: "var(--surface)" },
           ".cm-scroller": {
-            fontFamily: '"BIZ UDGothic", "Yu Gothic", monospace',
+            fontFamily: '"Noto Serif JP", serif',
             lineHeight: "1.7",
           },
           ".cm-content": { padding: "1rem 0 5rem" },

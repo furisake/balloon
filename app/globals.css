@@ -50,7 +50,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Serif JP", serif;
 }
 a {
   text-underline-offset: 3px;
@@ -72,7 +72,7 @@ a {
   min-height: 100%;
 }
 .serif {
-  font-family: "Noto Serif JP", "Yu Mincho", serif;
+  font-family: "Noto Serif JP", serif;
 }
 .vertical-doc {
   writing-mode: vertical-rl;
