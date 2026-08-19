@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- 青空文庫注記の任意サイズ画像を許可ホスト検証後に表示するため */
 
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import type { BlockNode, DocumentNode, InlineNode } from "@/lib/core/types";
 import { cn } from "@/lib/utils";
 import type { DisplaySettings } from "./display-settings";
@@ -93,13 +94,17 @@ function Block({
       allowedImageHosts={allowedImageHosts}
     />
   ));
+  const style: CSSProperties = {
+    ...(block.indent ? { marginInlineStart: `${block.indent}em` } : undefined),
+    ...(block.endIndent !== undefined
+      ? { marginInlineEnd: `${block.endIndent}em`, textAlign: "end" }
+      : undefined),
+  };
   const props = {
     "data-source-from": block.sourceRange.from,
     "data-source-to": block.sourceRange.to,
     className: "mb-[1em]",
-    style: block.indent
-      ? { marginInlineStart: `${block.indent}em` }
-      : undefined,
+    style,
   };
   if (block.type === "heading") {
     const Tag = `h${block.level + 1}` as "h2" | "h3" | "h4";
@@ -134,7 +139,9 @@ function Inline({
     );
   if (node.type === "emphasis")
     return (
-      <em className={highlighted ? "search-highlight" : undefined}>
+      <em
+        className={`not-italic [text-emphasis:filled_sesame] ${highlighted ? "search-highlight" : ""}`}
+      >
         {node.children.map((child, index) => (
           <Inline
             key={index}
@@ -159,7 +166,6 @@ function Inline({
           {node.alt || "画像の取得に失敗しました"}
         </span>
       );
-    // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={url}

@@ -34,6 +34,7 @@ import {
   FileUp,
   Menu,
   Redo2,
+  Save,
   Search,
   Undo2,
 } from "lucide-react";
@@ -62,6 +63,7 @@ export function EditorWorkspace() {
   const previewRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef("untitled.txt");
   const syncOriginRef = useRef<"editor" | "preview" | null>(null);
   const syncTimerRef = useRef<number | undefined>(undefined);
   const restoredDraftRef = useRef({
@@ -86,6 +88,7 @@ export function EditorWorkspace() {
     void loadDraft().then((draft) => {
       if (draft) {
         restoredDraftRef.current = draft;
+        nameRef.current = draft.name;
         setText(draft.text);
         setName(draft.name);
         setParsed(parse(draft.text));
@@ -111,6 +114,17 @@ export function EditorWorkspace() {
   const updateText = useCallback((next: string) => {
     setText(next);
     setSaveState("保存中");
+  }, []);
+  const saveUtf8 = useCallback((source: string) => {
+    try {
+      downloadBlob(
+        new Blob([source], { type: "text/plain;charset=utf-8" }),
+        nameRef.current,
+      );
+      setExportError(undefined);
+    } catch {
+      setExportError("UTF-8で保存できませんでした");
+    }
   }, []);
   const holdSyncOrigin = useCallback((origin: "editor" | "preview") => {
     syncOriginRef.current = origin;
@@ -164,7 +178,27 @@ export function EditorWorkspace() {
         highlightActiveLine(),
         drawSelection(),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of([
+          {
+            key: "Ctrl-s",
+            preventDefault: true,
+            run: (view) => {
+              saveUtf8(view.state.doc.toString());
+              return true;
+            },
+          },
+          {
+            key: "Meta-s",
+            preventDefault: true,
+            run: (view) => {
+              saveUtf8(view.state.doc.toString());
+              return true;
+            },
+          },
+          ...defaultKeymap,
+          ...historyKeymap,
+          ...searchKeymap,
+        ]),
         EditorView.lineWrapping,
         aozoraSyntaxHighlighting(),
         invisibleCharacters(),
@@ -191,12 +225,33 @@ export function EditorWorkspace() {
             color: "var(--subtle)",
             borderColor: "var(--border)",
           },
-          ".cm-aozora-annotation": {
+          ".cm-aozora-layout, .cm-aozora-heading, .cm-aozora-gaiji, .cm-aozora-emphasis, .cm-aozora-image, .cm-aozora-note":
+            {
+              fontWeight: "600",
+              borderRadius: "2px",
+            },
+          ".cm-aozora-layout": {
             color: "var(--accent)",
-            fontWeight: "600",
             backgroundColor:
               "color-mix(in srgb, var(--accent) 10%, transparent)",
-            borderRadius: "2px",
+          },
+          ".cm-aozora-heading": {
+            color: "light-dark(#6d28d9, #c4b5fd)",
+            backgroundColor:
+              "color-mix(in srgb, light-dark(#6d28d9, #c4b5fd) 10%, transparent)",
+          },
+          ".cm-aozora-gaiji": {
+            color: "light-dark(#a34700, #fbbf24)",
+          },
+          ".cm-aozora-emphasis": {
+            color: "light-dark(#be123c, #fb7185)",
+          },
+          ".cm-aozora-image": {
+            color: "light-dark(#047857, #6ee7b7)",
+          },
+          ".cm-aozora-note": {
+            color: "var(--subtle)",
+            fontWeight: "600",
           },
           ".cm-aozora-ruby": { color: "var(--focus)", fontWeight: "600" },
           ".cm-aozora-marker": {
@@ -231,7 +286,7 @@ export function EditorWorkspace() {
       view.destroy();
       viewRef.current = null;
     };
-  }, [holdSyncOrigin, ready, scrollPreviewTo, updateText]);
+  }, [holdSyncOrigin, ready, saveUtf8, scrollPreviewTo, updateText]);
 
   function replaceDocument(next: string) {
     const view = viewRef.current;
@@ -257,6 +312,7 @@ export function EditorWorkspace() {
     const error = validateDraftName(next);
     setNameError(error);
     if (!error) {
+      nameRef.current = next;
       setName(next);
       setSaveState("保存中");
     }
@@ -283,6 +339,7 @@ export function EditorWorkspace() {
     try {
       const decoded = decodeText(new Uint8Array(await file.arrayBuffer()));
       replaceDocument(decoded.text);
+      nameRef.current = file.name;
       setName(file.name);
       setNameError(undefined);
       setExportError(undefined);
@@ -298,12 +355,7 @@ export function EditorWorkspace() {
         bytes.byteOffset + bytes.byteLength,
       ) as ArrayBuffer;
       const blob = new Blob([data], { type: "text/plain;charset=shift_jis" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = name;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, nameRef.current);
       setExportError(undefined);
     } catch (error) {
       setExportError(
@@ -315,6 +367,7 @@ export function EditorWorkspace() {
   }
   function resetDraft() {
     replaceDocument("");
+    nameRef.current = "untitled.txt";
     setName("untitled.txt");
     setNameError(undefined);
     setExportError(undefined);
@@ -377,6 +430,15 @@ export function EditorWorkspace() {
               <Button variant="ghost" onClick={() => fileRef.current?.click()}>
                 <FileUp size={18} />
                 ファイルを開く
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  saveUtf8(viewRef.current?.state.doc.toString() ?? text)
+                }
+              >
+                <Save size={18} />
+                UTF-8で保存
               </Button>
               <Button variant="ghost" onClick={exportFile}>
                 <FileDown size={18} />
@@ -522,6 +584,17 @@ export function EditorWorkspace() {
       </footer>
     </main>
   );
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function aozoraSyntaxHighlighting() {

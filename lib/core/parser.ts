@@ -10,7 +10,16 @@ import type {
 
 const HEADING = /^(?:(?:「([^」]+)」は)?(大|中|小)見出し)$/;
 const INDENT = /^([０-９0-9]+)字下げ$/;
-const IMAGE = /^挿絵（(.+?)(?:、横(\d+)×縦(\d+))?）入る$/;
+const END_INDENT = /^地から([０-９0-9]+)字上げ$/;
+const IMAGE =
+  /^(.+?)（([^、）]+\.(?:gif|jpe?g|png))(?:、横(\d+)×縦(\d+))?）入る$/i;
+const PAGE_BREAK = /^(?:改丁|改ページ|改見開き|改段)$/;
+const EMPHASIS =
+  /^「(.+)」に(?:白ゴマ|丸|白丸|黒三角|白三角|二重丸|蛇の目|ばつ)?傍点$/;
+const EMPHASIS_START =
+  /^(?:ここから)?(?:左に)?(?:白ゴマ|丸|白丸|黒三角|白三角|二重丸|蛇の目|ばつ)?傍点$/;
+const EMPHASIS_END =
+  /^(?:ここで)?(?:左に)?(?:白ゴマ|丸|白丸|黒三角|白三角|二重丸|蛇の目|ばつ)?傍点終わり$/;
 
 export function parse(source: string): ParseResult {
   const blocks: BlockNode[] = [];
@@ -36,9 +45,31 @@ export function parseBlock(
 ): BlockNode {
   const tokens = tokenize(source, offset);
   const last = tokens.at(-1);
-  if (last?.type === "annotation" && last.value === "［＃改ページ］") {
+  if (
+    tokens.length === 1 &&
+    last?.type === "annotation" &&
+    PAGE_BREAK.test(last.value.slice(2, -1))
+  ) {
     return {
       type: "pageBreak",
+      sourceRange: { from: offset, to: offset + source.length },
+    };
+  }
+  const headingStart =
+    tokens[0]?.type === "annotation"
+      ? tokens[0].value.slice(2, -1).match(/^(大|中|小)見出し$/)
+      : undefined;
+  const headingEnd =
+    last?.type === "annotation"
+      ? last.value.slice(2, -1).match(/^(大|中|小)見出し終わり$/)
+      : undefined;
+  if (headingStart && headingEnd && headingStart[1] === headingEnd[1]) {
+    const level =
+      headingStart[1] === "大" ? 1 : headingStart[1] === "中" ? 2 : 3;
+    return {
+      type: "heading",
+      level,
+      children: parseInline(tokens.slice(1, -1), diagnostics),
       sourceRange: { from: offset, to: offset + source.length },
     };
   }
@@ -58,8 +89,16 @@ export function parseBlock(
     first?.type === "annotation"
       ? first.value.slice(2, -1).match(INDENT)
       : undefined;
+  const endIndentMatch =
+    first?.type === "annotation"
+      ? first.value.slice(2, -1).match(END_INDENT)
+      : undefined;
   const indent = indentMatch ? parseFullWidthNumber(indentMatch[1]) : undefined;
-  const content = indentMatch ? withoutHeading.slice(1) : withoutHeading;
+  const endIndent = endIndentMatch
+    ? parseFullWidthNumber(endIndentMatch[1])
+    : undefined;
+  const content =
+    indentMatch || endIndentMatch ? withoutHeading.slice(1) : withoutHeading;
   const children = parseInline(content, diagnostics);
   const sourceRange = { from: offset, to: offset + source.length };
   if (
@@ -75,15 +114,19 @@ export function parseBlock(
     });
   }
   return level
-    ? { type: "heading", level, children, indent, sourceRange }
-    : { type: "paragraph", children, indent, sourceRange };
+    ? { type: "heading", level, children, indent, endIndent, sourceRange }
+    : { type: "paragraph", children, indent, endIndent, sourceRange };
 }
 
 function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
   const nodes: InlineNode[] = [];
+  let emphasis:
+    | { children: InlineNode[]; sourceRange: { from: number; to: number } }
+    | undefined;
   for (const token of tokens) {
+    const current = emphasis?.children ?? nodes;
     if (token.type === "text") {
-      nodes.push({
+      current.push({
         type: "text",
         value: token.value,
         sourceRange: token.sourceRange,
@@ -91,7 +134,7 @@ function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
       continue;
     }
     if (token.type === "ruby") {
-      const previous = nodes.at(-1);
+      const previous = current.at(-1);
       if (!previous || previous.type !== "text") {
         diagnostics.push({
           from: token.sourceRange.from,
@@ -99,7 +142,7 @@ function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
           severity: "error",
           message: "ルビの親文字がありません",
         });
-        nodes.push({
+        current.push({
           type: "text",
           value: token.value,
           sourceRange: token.sourceRange,
@@ -116,7 +159,7 @@ function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
           severity: "error",
           message: "ルビの親文字を判定できません",
         });
-        nodes.push({
+        current.push({
           type: "text",
           value: token.value,
           sourceRange: token.sourceRange,
@@ -126,8 +169,8 @@ function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
       previous.value = previous.value
         .slice(0, previous.value.length - base.length)
         .replace(/｜$/, "");
-      if (!previous.value) nodes.pop();
-      nodes.push({
+      if (!previous.value) current.pop();
+      current.push({
         type: "ruby",
         base,
         reading: token.value.slice(1, -1),
@@ -140,29 +183,107 @@ function parseInline(tokens: Token[], diagnostics: Diagnostic[]): InlineNode[] {
     }
     if (token.type !== "annotation") continue;
     const value = token.value.slice(2, -1);
-    if (value.startsWith("ここから傍点") || value === "傍点") {
-      nodes.push({ type: "note", value, sourceRange: token.sourceRange });
-    } else if (value.startsWith("外字")) {
-      nodes.push({
-        type: "gaiji",
-        description: value,
-        sourceRange: token.sourceRange,
-      });
+    if (EMPHASIS_START.test(value) && !emphasis) {
+      emphasis = { children: [], sourceRange: { ...token.sourceRange } };
+    } else if (EMPHASIS_END.test(value) && emphasis) {
+      emphasis.sourceRange.to = token.sourceRange.to;
+      nodes.push({ type: "emphasis", ...emphasis });
+      emphasis = undefined;
     } else {
-      const image = value.match(IMAGE);
-      if (image)
-        nodes.push({
-          type: "image",
-          src: image[1],
-          alt: "挿絵",
-          width: toNumber(image[2]),
-          height: toNumber(image[3]),
+      const emphasisMatch = value.match(EMPHASIS);
+      if (emphasisMatch) {
+        if (!wrapTrailingEmphasis(current, emphasisMatch[1], token)) {
+          diagnostics.push({
+            from: token.sourceRange.from,
+            to: token.sourceRange.to,
+            severity: "error",
+            message: "傍点注記の対象文字列が本文と一致しません",
+          });
+        }
+      } else if (
+        value.startsWith("外字") ||
+        /面区点番号|\d+-\d+-\d+/.test(value)
+      ) {
+        current.push({
+          type: "gaiji",
+          description: value,
           sourceRange: token.sourceRange,
         });
-      else nodes.push({ type: "note", value, sourceRange: token.sourceRange });
+      } else {
+        const image = value.match(IMAGE);
+        if (image)
+          current.push({
+            type: "image",
+            src: image[2],
+            alt: imageAlt(image[1]),
+            width: toNumber(image[3]),
+            height: toNumber(image[4]),
+            sourceRange: token.sourceRange,
+          });
+        else
+          current.push({ type: "note", value, sourceRange: token.sourceRange });
+      }
     }
   }
+  if (emphasis) {
+    diagnostics.push({
+      from: emphasis.sourceRange.from,
+      to: emphasis.sourceRange.to,
+      severity: "error",
+      message: "傍点注記が閉じられていません",
+    });
+    nodes.push(...emphasis.children);
+  }
   return nodes;
+}
+
+function wrapTrailingEmphasis(
+  nodes: InlineNode[],
+  target: string,
+  annotation: Token,
+): boolean {
+  if (!nodes.map(inlineText).join("").endsWith(target)) return false;
+  const children: InlineNode[] = [];
+  let remaining = target.length;
+  while (remaining > 0) {
+    const node = nodes.pop();
+    if (!node) return false;
+    const value = inlineText(node);
+    if (value.length <= remaining) {
+      children.unshift(node);
+      remaining -= value.length;
+      continue;
+    }
+    if (node.type !== "text") {
+      nodes.push(node, ...children);
+      return false;
+    }
+    const split = node.value.length - remaining;
+    nodes.push({
+      ...node,
+      value: node.value.slice(0, split),
+      sourceRange: { ...node.sourceRange, to: node.sourceRange.from + split },
+    });
+    children.unshift({
+      ...node,
+      value: node.value.slice(split),
+      sourceRange: { ...node.sourceRange, from: node.sourceRange.from + split },
+    });
+    remaining = 0;
+  }
+  nodes.push({
+    type: "emphasis",
+    children,
+    sourceRange: {
+      from: children[0].sourceRange.from,
+      to: annotation.sourceRange.to,
+    },
+  });
+  return true;
+}
+
+function imageAlt(value: string): string {
+  return value.match(/^「(.+)」のキャプション付き/)?.[1] ?? value;
 }
 
 function toNumber(value: string | undefined) {

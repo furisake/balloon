@@ -21,14 +21,18 @@ export type InlineNode =
       height?: number;
     });
 
+interface BlockLayout {
+  indent?: number;
+  endIndent?: number;
+}
+
 export type BlockNode =
-  | (NodeBase & { type: "paragraph"; children: InlineNode[]; indent?: number })
+  | (NodeBase & BlockLayout & { type: "paragraph"; children: InlineNode[] })
   | (NodeBase & {
       type: "heading";
       level: 1 | 2 | 3;
       children: InlineNode[];
-      indent?: number;
-    })
+    } & BlockLayout)
   | (NodeBase & { type: "pageBreak" });
 
 export interface DocumentNode extends NodeBase {
