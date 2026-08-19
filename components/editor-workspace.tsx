@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { EditorState, StateField } from "@codemirror/state";
 import {
   Decoration,
@@ -462,8 +468,8 @@ export function EditorWorkspace() {
       </div>
       <div className="relative flex min-h-0 flex-1">
         <section
-          className={`${mobilePane === "editor" ? "block" : "hidden"} h-full min-w-0 md:block`}
-          style={{ width: `${ratio}%` }}
+          className={`${mobilePane === "editor" ? "block" : "hidden"} h-full w-full min-w-0 md:block md:w-[var(--editor-width)]`}
+          style={{ "--editor-width": `${ratio}%` } as CSSProperties}
           aria-label="Editor"
         >
           <div ref={hostRef} className="h-full" />
