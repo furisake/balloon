@@ -47,6 +47,7 @@ import {
 } from "@/lib/encoding";
 import { loadDraft, saveDraft } from "@/lib/storage";
 import { validateDraftName } from "@/lib/editor-name";
+import { aozoraSyntaxRanges } from "@/lib/editor-syntax";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
 import { ThemeSwitch } from "./theme-provider";
@@ -165,6 +166,7 @@ export function EditorWorkspace() {
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         EditorView.lineWrapping,
+        aozoraSyntaxHighlighting(),
         invisibleCharacters(),
         linter((view): CmDiagnostic[] =>
           lint(view.state.doc.toString()).map((item) => ({
@@ -188,6 +190,18 @@ export function EditorWorkspace() {
             backgroundColor: "var(--muted)",
             color: "var(--subtle)",
             borderColor: "var(--border)",
+          },
+          ".cm-aozora-annotation": {
+            color: "var(--accent)",
+            fontWeight: "600",
+            backgroundColor:
+              "color-mix(in srgb, var(--accent) 10%, transparent)",
+            borderRadius: "2px",
+          },
+          ".cm-aozora-ruby": { color: "var(--focus)", fontWeight: "600" },
+          ".cm-aozora-marker": {
+            color: "var(--accent)",
+            fontWeight: "700",
           },
         }),
       ],
@@ -507,6 +521,32 @@ export function EditorWorkspace() {
         <span>{lineCount}行</span>
       </footer>
     </main>
+  );
+}
+
+function aozoraSyntaxHighlighting() {
+  const field = StateField.define<DecorationSet>({
+    create(state) {
+      return syntaxDecorations(state.doc.toString());
+    },
+    update(value, transaction) {
+      return transaction.docChanged
+        ? syntaxDecorations(transaction.state.doc.toString())
+        : value.map(transaction.changes);
+    },
+    provide: (value) => EditorView.decorations.from(value),
+  });
+  return field;
+}
+
+function syntaxDecorations(source: string): DecorationSet {
+  return Decoration.set(
+    aozoraSyntaxRanges(source).map((range) =>
+      Decoration.mark({ class: `cm-aozora-${range.kind}` }).range(
+        range.from,
+        range.to,
+      ),
+    ),
   );
 }
 
